@@ -33,6 +33,7 @@
     <select id="modeSelect">
       <option value="normal">Normal</option>
       <option value="13ft">13ft.wasimaster</option>
+      <option value="txtfy">txtfy.io</option>
     </select>
     <button onclick="navigate()">Go</button>
     <button onclick="toggleSettings()">⚙️</button>
@@ -50,38 +51,66 @@
   <div id="iframeContainer"></div>
 
   <script>
-    let tabs = [{ iframe: null, history: [], index: -1 }];
-    let currentTab = 0;
+    var tabs = [{ iframe: null, history: [], index: -1 }];
+    var currentTab = 0;
 
     function normalize(url) {
-      return url.startsWith('http') ? url : 'https://' + url;
+      if (url.indexOf('http') !== 0) url = 'https://' + url;
+      return url;
     }
 
     function createIframe(tabIndex) {
-      const iframe = document.createElement('iframe');
-      iframe.setAttribute('sandbox', 'allow-same-origin allow-scripts allow-forms allow-popups');
+      var iframe = document.createElement('iframe');
+      iframe.setAttribute('sandbox', 'allow-scripts allow-forms allow-same-origin allow-popups');
+      iframe.setAttribute('referrerpolicy', 'no-referrer');
+      iframe.onload = function () {
+        try {
+          var loc = iframe.contentWindow.location.href;
+          tabs[tabIndex].history[tabs[tabIndex].index] = loc;
+          if (tabIndex === currentTab) {
+            document.getElementById('url').value = loc;
+          }
+        } catch (e) {}
+      };
+      iframe.addEventListener("load", function () {
+        try {
+          var doc = iframe.contentDocument || iframe.contentWindow.document;
+          var links = doc.querySelectorAll("a[href]");
+          for (var i = 0; i < links.length; i++) {
+            links[i].addEventListener("click", function (e) {
+              e.preventDefault();
+              var target = e.currentTarget;
+              if (target && target.href) {
+                navigateTo(target.href);
+              }
+            });
+          }
+        } catch (e) {}
+      });
       document.getElementById('iframeContainer').appendChild(iframe);
       tabs[tabIndex].iframe = iframe;
     }
 
     function showIframe() {
-      tabs.forEach((t, i) => {
-        t.iframe.style.display = i === currentTab ? 'block' : 'none';
-      });
+      for (var i = 0; i < tabs.length; i++) {
+        tabs[i].iframe.style.display = i === currentTab ? 'block' : 'none';
+      }
     }
 
     function navigate() {
-      const raw = document.getElementById('url').value;
-      const mode = document.getElementById('modeSelect').value;
-      let url = normalize(raw);
+      var raw = document.getElementById('url').value;
+      var mode = document.getElementById('modeSelect').value;
+      var url = normalize(raw);
       if (mode === '13ft') {
         url = 'https://13ft.wasimaster.me/' + url;
+      } else if (mode === 'txtfy') {
+        url = 'https://txtfy.io/' + url;
       }
       navigateTo(url);
     }
 
     function navigateTo(url) {
-      const tab = tabs[currentTab];
+      var tab = tabs[currentTab];
       tab.history = tab.history.slice(0, tab.index + 1);
       tab.history.push(url);
       tab.index++;
@@ -91,7 +120,7 @@
     }
 
     function goBack() {
-      const tab = tabs[currentTab];
+      var tab = tabs[currentTab];
       if (tab.index > 0) {
         tab.index--;
         tab.iframe.src = tab.history[tab.index];
@@ -100,7 +129,7 @@
     }
 
     function goForward() {
-      const tab = tabs[currentTab];
+      var tab = tabs[currentTab];
       if (tab.index < tab.history.length - 1) {
         tab.index++;
         tab.iframe.src = tab.history[tab.index];
@@ -109,26 +138,26 @@
     }
 
     function reload() {
-      const tab = tabs[currentTab];
+      var tab = tabs[currentTab];
       if (tab.index >= 0) tab.iframe.src = tab.history[tab.index];
     }
 
     function updateTabList() {
-      const sel = document.getElementById('tabSelect');
+      var sel = document.getElementById('tabSelect');
       sel.innerHTML = '';
-      tabs.forEach((_, i) => {
-        const opt = document.createElement('option');
+      for (var i = 0; i < tabs.length; i++) {
+        var opt = document.createElement('option');
         opt.value = i;
         opt.textContent = 'Tab ' + (i + 1);
         if (i === currentTab) opt.selected = true;
         sel.appendChild(opt);
-      });
+      }
     }
 
     function switchTab(i) {
-      currentTab = +i;
+      currentTab = parseInt(i);
       showIframe();
-      const tab = tabs[currentTab];
+      var tab = tabs[currentTab];
       document.getElementById('url').value = tab.history[tab.index] || '';
     }
 
@@ -152,23 +181,28 @@
     }
 
     function updateBookmarks() {
-      const bar = document.getElementById('bookmarkBar');
+      var bar = document.getElementById('bookmarkBar');
       bar.innerHTML = '';
-      const bms = JSON.parse(localStorage.getItem('bookmarks') || '[]');
-      bms.forEach(url => {
-        const btn = document.createElement('button');
-        btn.textContent = new URL(url).hostname;
-        btn.onclick = () => { document.getElementById('url').value = url; navigate(); };
-        bar.appendChild(btn);
-      });
+      var bms = JSON.parse(localStorage.getItem('bookmarks') || '[]');
+      for (var i = 0; i < bms.length; i++) {
+        (function (url) {
+          var btn = document.createElement('button');
+          btn.textContent = new URL(url).hostname;
+          btn.onclick = function () {
+            document.getElementById('url').value = url;
+            navigate();
+          };
+          bar.appendChild(btn);
+        })(bms[i]);
+      }
     }
 
     function addBookmark() {
-      const tab = tabs[currentTab];
-      const url = tab.history[tab.index];
+      var tab = tabs[currentTab];
+      var url = tab.history[tab.index];
       if (!url) return;
-      const bms = JSON.parse(localStorage.getItem('bookmarks') || '[]');
-      if (!bms.includes(url)) {
+      var bms = JSON.parse(localStorage.getItem('bookmarks') || '[]');
+      if (bms.indexOf(url) === -1) {
         bms.push(url);
         localStorage.setItem('bookmarks', JSON.stringify(bms));
         updateBookmarks();
@@ -176,10 +210,10 @@
     }
 
     function removeBookmark() {
-      const tab = tabs[currentTab];
-      const url = tab.history[tab.index];
-      let bms = JSON.parse(localStorage.getItem('bookmarks') || '[]');
-      bms = bms.filter(u => u !== url);
+      var tab = tabs[currentTab];
+      var url = tab.history[tab.index];
+      var bms = JSON.parse(localStorage.getItem('bookmarks') || '[]');
+      bms = bms.filter(function (u) { return u !== url; });
       localStorage.setItem('bookmarks', JSON.stringify(bms));
       updateBookmarks();
     }
@@ -197,18 +231,21 @@
     }
 
     function saveOffline() {
-      const tab = tabs[currentTab];
-      tab.iframe.contentWindow.document.documentElement.setAttribute('contenteditable', true);
-      const page = tab.iframe.contentWindow.document.documentElement.outerHTML;
-      const title = tab.history[tab.index] || 'offline_page';
-      localStorage.setItem('offline_page', JSON.stringify({ url: title, content: page }));
-      alert('Page saved offline!');
+      try {
+        var tab = tabs[currentTab];
+        var page = tab.iframe.contentWindow.document.documentElement.outerHTML;
+        var title = tab.history[tab.index] || 'offline_page';
+        localStorage.setItem('offline_page', JSON.stringify({ url: title, content: page }));
+        alert('Page saved offline!');
+      } catch (e) {
+        alert('Could not save offline due to CORS.');
+      }
     }
 
     function loadOffline() {
-      const data = JSON.parse(localStorage.getItem('offline_page') || '{}');
+      var data = JSON.parse(localStorage.getItem('offline_page') || '{}');
       if (data.content) {
-        const tab = tabs[currentTab];
+        var tab = tabs[currentTab];
         tab.iframe.srcdoc = data.content;
         document.getElementById('url').value = data.url;
       } else {
@@ -217,7 +254,7 @@
     }
 
     function toggleSettings() {
-      const menu = document.getElementById('settingsMenu');
+      var menu = document.getElementById('settingsMenu');
       menu.style.display = menu.style.display === 'flex' ? 'none' : 'flex';
     }
 
