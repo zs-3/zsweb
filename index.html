@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Ziyaad's Lite Browser - CORS Proxy Mode</title>
+  <title>Ziyaad's Lite Browser - No Proxy</title>
   <style>
     body { margin: 0; font-family: sans-serif; }
     #topbar {
@@ -46,7 +46,6 @@
   <div id="iframeContainer"></div>
 
   <script>
-    const CORS_PROXY = 'https://api.allorigins.win/raw?url=';
     let tabs = [{ iframe: null, history: [], index: -1 }];
     let currentTab = 0;
 
@@ -54,34 +53,9 @@
       return url.startsWith('http') ? url : 'https://' + url;
     }
 
-    async function fetchAndRender(rawUrl) {
-      const url = normalize(rawUrl);
-      const res = await fetch(CORS_PROXY + encodeURIComponent(url));
-      const html = await res.text();
-      const enhanced = `
-        <base href="${url}">
-        <script>
-          document.addEventListener('click', e => {
-            const a = e.target.closest('a');
-            if (a && a.href) {
-              e.preventDefault();
-              parent.postMessage({ link: a.href }, '*');
-            }
-          });
-        </script>
-        ${html}`;
-      return { url, enhanced };
-    }
-
-    window.addEventListener('message', e => {
-      if (e.data.link) {
-        navigateTo(e.data.link);
-      }
-    });
-
     function createIframe(tabIndex) {
       const iframe = document.createElement('iframe');
-      iframe.sandbox = 'allow-scripts allow-forms';
+      iframe.setAttribute('sandbox', 'allow-same-origin allow-scripts allow-forms allow-popups');
       document.getElementById('iframeContainer').appendChild(iframe);
       tabs[tabIndex].iframe = iframe;
     }
@@ -92,18 +66,18 @@
       });
     }
 
-    async function navigate() {
+    function navigate() {
       const raw = document.getElementById('url').value;
-      await navigateTo(raw);
+      navigateTo(raw);
     }
 
-    async function navigateTo(raw) {
-      const { url, enhanced } = await fetchAndRender(raw);
+    function navigateTo(raw) {
+      const url = normalize(raw);
       const tab = tabs[currentTab];
       tab.history = tab.history.slice(0, tab.index + 1);
       tab.history.push(url);
       tab.index++;
-      tab.iframe.srcdoc = enhanced;
+      tab.iframe.src = url;
       document.getElementById('url').value = url;
       showIframe();
     }
@@ -112,7 +86,8 @@
       const tab = tabs[currentTab];
       if (tab.index > 0) {
         tab.index--;
-        navigateTo(tab.history[tab.index]);
+        tab.iframe.src = tab.history[tab.index];
+        document.getElementById('url').value = tab.history[tab.index];
       }
     }
 
@@ -120,13 +95,14 @@
       const tab = tabs[currentTab];
       if (tab.index < tab.history.length - 1) {
         tab.index++;
-        navigateTo(tab.history[tab.index]);
+        tab.iframe.src = tab.history[tab.index];
+        document.getElementById('url').value = tab.history[tab.index];
       }
     }
 
     function reload() {
       const tab = tabs[currentTab];
-      if (tab.index >= 0) navigateTo(tab.history[tab.index]);
+      if (tab.index >= 0) tab.iframe.src = tab.history[tab.index];
     }
 
     function updateTabList() {
@@ -204,7 +180,7 @@
       tabs[currentTab].history = [];
       tabs[currentTab].index = -1;
       document.getElementById('url').value = '';
-      tabs[currentTab].iframe.srcdoc = '';
+      tabs[currentTab].iframe.src = '';
     }
 
     function clearBookmarks() {
@@ -214,7 +190,8 @@
 
     function saveOffline() {
       const tab = tabs[currentTab];
-      const page = tab.iframe.srcdoc;
+      tab.iframe.contentWindow.document.documentElement.setAttribute('contenteditable', true);
+      const page = tab.iframe.contentWindow.document.documentElement.outerHTML;
       const title = tab.history[tab.index] || 'offline_page';
       localStorage.setItem('offline_page', JSON.stringify({ url: title, content: page }));
       alert('Page saved offline!');
@@ -236,7 +213,6 @@
       menu.style.display = menu.style.display === 'flex' ? 'none' : 'flex';
     }
 
-    // init
     updateBookmarks();
     createIframe(0);
     updateTabList();
