@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Ziyaad's Lite Browser - CORS Proxy Mode</title>
+  <style>
+    body { margin: 0; font-family: sans-serif; }
+    #topbar {
+      display: flex; align-items: center; gap: 6px;
+      background: #f0f0f0; padding: 10px;
+    }
+    #url { flex: 1; padding: 6px; }
+    button, select { padding: 6px; }
+    #bookmarkBar { background: #e0e0e0; padding: 6px; display: flex; gap: 6px; overflow-x: auto; }
+    #iframeContainer { height: calc(100vh - 138px); position: relative; }
+    iframe { width: 100%; height: 100%; border: none; }
+    #settingsMenu {
+      position: absolute; right: 10px; top: 50px;
+      background: white; border: 1px solid #ccc;
+      display: none; flex-direction: column; padding: 10px; gap: 5px; z-index: 999;
+    }
+  </style>
+</head>
+<body>
+  <div id="topbar">
+    <button onclick="goBack()">⬅️</button>
+    <button onclick="goForward()">➡️</button>
+    <button onclick="reload()">🔄</button>
+    <select id="tabSelect" onchange="switchTab(this.value)"></select>
+    <button onclick="addTab()">➕ Tab</button>
+    <button onclick="removeTab()">❌ Tab</button>
+    <input type="text" id="url" placeholder="Enter URL here...">
+    <button onclick="navigate()">Go</button>
+    <button onclick="toggleSettings()">⚙️</button>
+  </div>
+
+  <div id="bookmarkBar"></div>
+  <div id="settingsMenu">
+    <button onclick="addBookmark()">⭐ Add Bookmark</button>
+    <button onclick="removeBookmark()">🗑️ Remove Bookmark</button>
+    <button onclick="clearHistory()">🧹 Clear History</button>
+    <button onclick="clearBookmarks()">📛 Clear Bookmarks</button>
+    <button onclick="saveOffline()">💾 Save Offline</button>
+    <button onclick="loadOffline()">📂 Load Offline</button>
+  </div>
+  <div id="iframeContainer"></div>
+
+  <script>
+    const CORS_PROXY = 'https://api.allorigins.win/raw?url=';
+    let tabs = [{ iframe: null, history: [], index: -1 }];
+    let currentTab = 0;
+
+    function normalize(url) {
+      return url.startsWith('http') ? url : 'https://' + url;
+    }
+
+    async function fetchAndRender(rawUrl) {
+      const url = normalize(rawUrl);
+      const res = await fetch(CORS_PROXY + encodeURIComponent(url));
+      const html = await res.text();
+      const enhanced = `
+        <base href="${url}">
+        <script>
+          document.addEventListener('click', e => {
+            const a = e.target.closest('a');
+            if (a && a.href) {
+              e.preventDefault();
+              parent.postMessage({ link: a.href }, '*');
+            }
+          });
+        </script>
+        ${html}`;
+      return { url, enhanced };
+    }
+
+    window.addEventListener('message', e => {
+      if (e.data.link) {
+        navigateTo(e.data.link);
+      }
+    });
+
+    function createIframe(tabIndex) {
+      const iframe = document.createElement('iframe');
+      iframe.sandbox = 'allow-scripts allow-forms';
+      document.getElementById('iframeContainer').appendChild(iframe);
+      tabs[tabIndex].iframe = iframe;
+    }
+
+    function showIframe() {
+      tabs.forEach((t, i) => {
+        t.iframe.style.display = i === currentTab ? 'block' : 'none';
+      });
+    }
+
+    async function navigate() {
+      const raw = document.getElementById('url').value;
+      await navigateTo(raw);
+    }
+
+    async function navigateTo(raw) {
+      const { url, enhanced } = await fetchAndRender(raw);
+      const tab = tabs[currentTab];
+      tab.history = tab.history.slice(0, tab.index + 1);
+      tab.history.push(url);
+      tab.index++;
+      tab.iframe.srcdoc = enhanced;
+      document.getElementById('url').value = url;
+      showIframe();
+    }
+
+    function goBack() {
+      const tab = tabs[currentTab];
+      if (tab.index > 0) {
+        tab.index--;
+        navigateTo(tab.history[tab.index]);
+      }
+    }
+
+    function goForward() {
+      const tab = tabs[currentTab];
+      if (tab.index < tab.history.length - 1) {
+        tab.index++;
+        navigateTo(tab.history[tab.index]);
+      }
+    }
+
+    function reload() {
+      const tab = tabs[currentTab];
+      if (tab.index >= 0) navigateTo(tab.history[tab.index]);
+    }
+
+    function updateTabList() {
+      const sel = document.getElementById('tabSelect');
+      sel.innerHTML = '';
+      tabs.forEach((_, i) => {
+        const opt = document.createElement('option');
+        opt.value = i;
+        opt.textContent = 'Tab ' + (i + 1);
+        if (i === currentTab) opt.selected = true;
+        sel.appendChild(opt);
+      });
+    }
+
+    function switchTab(i) {
+      currentTab = +i;
+      showIframe();
+      const tab = tabs[currentTab];
+      document.getElementById('url').value = tab.history[tab.index] || '';
+    }
+
+    function addTab() {
+      tabs.push({ iframe: null, history: [], index: -1 });
+      currentTab = tabs.length - 1;
+      updateTabList();
+      createIframe(currentTab);
+      showIframe();
+      document.getElementById('url').value = '';
+    }
+
+    function removeTab() {
+      if (tabs.length === 1) return;
+      tabs[currentTab].iframe.remove();
+      tabs.splice(currentTab, 1);
+      currentTab = Math.max(0, currentTab - 1);
+      updateTabList();
+      showIframe();
+      document.getElementById('url').value = tabs[currentTab].history[tabs[currentTab].index] || '';
+    }
+
+    function updateBookmarks() {
+      const bar = document.getElementById('bookmarkBar');
+      bar.innerHTML = '';
+      const bms = JSON.parse(localStorage.getItem('bookmarks') || '[]');
+      bms.forEach(url => {
+        const btn = document.createElement('button');
+        btn.textContent = new URL(url).hostname;
+        btn.onclick = () => { document.getElementById('url').value = url; navigate(); };
+        bar.appendChild(btn);
+      });
+    }
+
+    function addBookmark() {
+      const tab = tabs[currentTab];
+      const url = tab.history[tab.index];
+      if (!url) return;
+      const bms = JSON.parse(localStorage.getItem('bookmarks') || '[]');
+      if (!bms.includes(url)) {
+        bms.push(url);
+        localStorage.setItem('bookmarks', JSON.stringify(bms));
+        updateBookmarks();
+      }
+    }
+
+    function removeBookmark() {
+      const tab = tabs[currentTab];
+      const url = tab.history[tab.index];
+      let bms = JSON.parse(localStorage.getItem('bookmarks') || '[]');
+      bms = bms.filter(u => u !== url);
+      localStorage.setItem('bookmarks', JSON.stringify(bms));
+      updateBookmarks();
+    }
+
+    function clearHistory() {
+      tabs[currentTab].history = [];
+      tabs[currentTab].index = -1;
+      document.getElementById('url').value = '';
+      tabs[currentTab].iframe.srcdoc = '';
+    }
+
+    function clearBookmarks() {
+      localStorage.removeItem('bookmarks');
+      updateBookmarks();
+    }
+
+    function saveOffline() {
+      const tab = tabs[currentTab];
+      const page = tab.iframe.srcdoc;
+      const title = tab.history[tab.index] || 'offline_page';
+      localStorage.setItem('offline_page', JSON.stringify({ url: title, content: page }));
+      alert('Page saved offline!');
+    }
+
+    function loadOffline() {
+      const data = JSON.parse(localStorage.getItem('offline_page') || '{}');
+      if (data.content) {
+        const tab = tabs[currentTab];
+        tab.iframe.srcdoc = data.content;
+        document.getElementById('url').value = data.url;
+      } else {
+        alert('No offline page saved.');
+      }
+    }
+
+    function toggleSettings() {
+      const menu = document.getElementById('settingsMenu');
+      menu.style.display = menu.style.display === 'flex' ? 'none' : 'flex';
+    }
+
+    // init
+    updateBookmarks();
+    createIframe(0);
+    updateTabList();
+    showIframe();
+  </script>
+</body>
+</html>
