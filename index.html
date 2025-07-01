@@ -30,6 +30,10 @@
     <button onclick="addTab()">➕ Tab</button>
     <button onclick="removeTab()">❌ Tab</button>
     <input type="text" id="url" placeholder="Enter URL here...">
+    <select id="modeSelect">
+      <option value="normal">Normal</option>
+      <option value="13ft">13ft.wasimaster</option>
+    </select>
     <button onclick="navigate()">Go</button>
     <button onclick="toggleSettings()">⚙️</button>
   </div>
@@ -68,11 +72,15 @@
 
     function navigate() {
       const raw = document.getElementById('url').value;
-      navigateTo(raw);
+      const mode = document.getElementById('modeSelect').value;
+      let url = normalize(raw);
+      if (mode === '13ft') {
+        url = 'https://13ft.wasimaster.me/' + url;
+      }
+      navigateTo(url);
     }
 
-    function navigateTo(raw) {
-      const url = normalize(raw);
+    function navigateTo(url) {
       const tab = tabs[currentTab];
       tab.history = tab.history.slice(0, tab.index + 1);
       tab.history.push(url);
