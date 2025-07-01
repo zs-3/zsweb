@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>ZS Lite Browser</title>
+  <title>Ziyaad's Lite Browser - Legacy Multi-Mode</title>
   <style>
     body { margin: 0; font-family: sans-serif; }
     #topbar {
@@ -32,7 +32,8 @@
     <input type="text" id="url" placeholder="Enter URL here...">
     <select id="modeSelect">
       <option value="normal">Normal</option>
-      <option value="textonly">Text-only</option>
+      <option value="wokereader">WokeReader - Text Mode</option>
+      <option value="13ft">13ft Mode</option>
     </select>
     <button onclick="navigate()">Go</button>
     <button onclick="toggleSettings()">⚙️</button>
@@ -83,6 +84,7 @@
                 navigateTo(target.href);
               }
             });
+          }
         } catch (e) {}
       });
       document.getElementById('iframeContainer').appendChild(iframe);
@@ -99,8 +101,10 @@
       var raw = document.getElementById('url').value;
       var mode = document.getElementById('modeSelect').value;
       var url = normalize(raw);
-      if (mode === 'textonly') {
-        url = 'https://txtfy.io/' + url;
+      if (mode === 'wokereader') {
+        url = 'https://wokereader.vercel.app/?url=' + encodeURIComponent(url);
+      } else if (mode === '13ft') {
+        url = 'https://13ft.wasimaster.me/' + url;
       }
       navigateTo(url);
     }
@@ -258,7 +262,6 @@
     createIframe(0);
     updateTabList();
     showIframe();
-    navigateTo('https://html.duckduckgo.com'); // CORS-friendly homepage
   </script>
 </body>
 </html>
